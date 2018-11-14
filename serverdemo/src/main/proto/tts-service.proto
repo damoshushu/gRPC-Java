@@ -1,0 +1,116 @@
+syntax = "proto3";
+package tts.v1;
+
+//import "tts-codec.proto";
+
+option java_package = "com.nuance.protobuf.tts.v1";
+option java_outer_classname = "TTSServiceProto";
+option go_package = "nuance.com/api/tts/v1";
+option java_multiple_files = true;
+option objc_class_prefix = "TTS";
+
+service TTSService {
+    rpc Speak (TTSRequest) returns (stream TTSStreamingResponse);
+}
+
+
+
+// When mapped to NCS HTTP v2 protocol, the only addition is
+// the earlyEmissionEnabled feature
+message TTSRequest {
+
+    string codec = 1;
+
+    // flags
+    bool earlyEmissionEnabled = 10;
+
+    enum TTSLogLevel {
+        NONE = 0;
+        MINIMAL = 1;
+        FULL = 2;
+    }
+
+    TTSLogLevel logLevel = 20;
+
+    //    int32 utteranceNumber = 21;  // needed?
+
+    string nmaid = 30;
+    string language = 31; // RFC 4646
+    //    string locale = 32; // needed?
+    string voice = 33;
+    string genre = 34;
+
+    enum TTSInputType {
+        TEXT = 0;
+        SSML = 1;
+        URI = 2; // do we support that in NCS?
+    }
+
+
+    // TODO: how are markers configured? Only through SSML? Or can I enable sentence/word markers
+    //       also for plain text input?
+    TTSInputType type = 50;
+    string input = 51;
+}
+
+
+// When mapped to NCS HTTP v2 protocol, each "Element" becomes a HTTP multipart
+// with appropriate headers
+message TTSStreamingResponse {
+
+    // Expected only once at the start of the stream
+    message HeaderElement {
+        string sessionId = 1;
+    }
+
+    // One or more audio elements are interleaved in the stream
+    // audio elements have a certain length in milliseconds and define
+    // the stream time (which is referenced by metadata elements)
+    message AudioElement {
+        string codec = 1;
+        int32 packetDurationMilliseconds = 2;
+
+        bytes data = 10;
+    }
+
+    // Zero or more metadata elements are interleaved in the stream
+    // the time offset refers to the audio time
+    message MetadataElement {
+        repeated TTSEvent event = 1;
+    }
+
+    // Zero or more log elements are interleaved in the stream
+    message LogElement {
+        string logdata = 1;
+    }
+
+    // There's no such thing as an ErrorElement. Instead, we'll fail the RPC call accordingly
+
+    oneof element {
+        HeaderElement header = 1;
+        AudioElement audio = 2;
+        MetadataElement metadata = 3;
+        LogElement log = 4;
+        //        ErrorElement error = 5;
+    }
+
+}
+
+// TODO: review event types
+message TTSEvent {
+    int32 timeoffsetMilliseconds = 1;
+    oneof event {
+        // TODO: event types
+        //       - bool for simple event marker
+        //       - int for event counter (e.g. 5th audible segment)
+        //       - string for event (e.g. the actual word for a word marker)
+        //       - combination of the above?
+        bool audibleSegment = 10;
+        string bookmark = 11;
+        string phoneme = 12;
+        string word = 13;
+        bool sentence = 14;
+        bool paragraph = 15;
+    }
+}
+
